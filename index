@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oil · Finger Painting Studio</title>
+<style>
+  :root {
+    --bg: #1a1410;
+    --panel: rgba(26, 20, 16, 0.82);
+    --line: rgba(220, 200, 170, 0.14);
+    --text: #ebe0d0;
+    --muted: #8a7968;
+    --accent: #d4a574;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Bodoni Moda", "Didot", "Playfair Display", Georgia, serif;
+    touch-action: none;
+  }
+
+  body { position: relative; }
+
+  video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0.08;
+    filter: saturate(0.5) contrast(1.2) brightness(0.6);
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #canvasBg { z-index: 0; }
+  #canvasPaint { z-index: 1; }
+  #canvasHUD { z-index: 2; pointer-events: none; }
+
+  .hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .brand {
+    position: absolute;
+    top: 24px;
+    left: 28px;
+    pointer-events: none;
+  }
+
+  .brand .mark {
+    font-family: "Bodoni Moda", "Didot", Georgia, serif;
+    font-size: 42px;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .brand .sub {
+    font-size: 9px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .palette {
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 14px;
+    background: var(--panel);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--line);
+    border-radius: 80px;
+    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 240, 220, 0.06);
+  }
+
+  .palette .label {
+    font-size: 8px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    margin: 2px 0 6px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    align-self: center;
+  }
+
+  .swatch {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2), inset 0 -3px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .swatch:hover { transform: scale(1.08); }
+
+  .swatch.active {
+    transform: scale(1.12);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(212, 165, 116, 0.3), 0 6px 16px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.25);
+  }
+
+  .controls {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: auto;
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--panel);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.5);
+  }
+
+  .btn {
+    pointer-events: auto;
+    border: 1px solid var(--line);
+    background: rgba(40, 32, 26, 0.7);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .btn:hover { background: rgba(60, 48, 38, 0.9); color: #fff; }
+
+  .btn.primary {
+    background: var(--accent);
+    color: #2a1f15;
+    border-color: transparent;
+    font-weight: 600;
+  }
+
+  .btn.primary:hover { background: #e2b885; }
+
+  .fingers-guide {
+    position: absolute;
+    left: 24px;
+    bottom: 24px;
+    pointer-events: none;
+    padding: 16px 18px;
+    background: var(--panel);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    min-width: 220px;
+  }
+
+  .fingers-guide .title {
+    font-size: 9px;
+    letter-spacing: 0.36em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .finger-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    padding: 4px 0;
+    color: var(--text);
+  }
+
+  .finger-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.4);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  .finger-name {
+    font-style: italic;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .start-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 24px;
+    background: rgba(10, 8, 6, 0.72);
+    backdrop-filter: blur(14px);
+    z-index: 20;
+    padding: 40px;
+    text-align: center;
+  }
+
+  .start-overlay h1 {
+    font-family: "Bodoni Moda", "Didot", Georgia, serif;
+    font-size: 72px;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .start-overlay p {
+    max-width: 460px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .start-btn {
+    pointer-events: auto;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 18px 44px;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.36em;
+    text-transform: uppercase;
+    background: var(--accent);
+    color: #2a1f15;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.2s ease;
+  }
+
+  .start-btn:hover { transform: scale(1.04); }
+
+  .start-btn:disabled { opacity: 0.6; cursor: progress; }
+
+  @media (max-width: 780px) {
+    .brand .mark { font-size: 28px; }
+    .fingers-guide { display: none; }
+    .palette { right: 12px; padding: 12px 10px; border-radius: 60px; }
+    .swatch { width: 34px; height: 34px; }
+    .start-overlay h1 { font-size: 48px; }
+  }
+</style>
+</head>
+<body>
+<video id="webcam" autoplay playsinline muted></video>
+<canvas id="canvasBg"></canvas>
+<canvas id="canvasPaint"></canvas>
+<canvas id="canvasHUD"></canvas>
+
+<div class="hud">
+  <div class="brand">
+    <div class="mark">Oléo</div>
+    <div class="sub">Finger Painting Studio</div>
+  </div>
+
+  <div class="palette" id="palette">
+    <div class="label">Palette</div>
+  </div>
+
+  <div class="fingers-guide">
+    <div class="title">Each Finger, a Brush</div>
+    <div class="finger-row"><span class="finger-dot" id="guide-thumb"></span><span>Thumb</span><span class="finger-name">pinch to paint</span></div>
+    <div class="finger-row"><span class="finger-dot" id="guide-index"></span><span>Index</span></div>
+    <div class="finger-row"><span class="finger-dot" id="guide-middle"></span><span>Middle</span></div>
+    <div class="finger-row"><span class="finger-dot" id="guide-ring"></span><span>Ring</span></div>
+    <div class="finger-row"><span class="finger-dot" id="guide-pinky"></span><span>Pinky</span></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="undoBtn">Undo</button>
+    <button class="btn" id="clearBtn">Clear</button>
+    <button class="btn primary" id="saveBtn">Save</button>
+  </div>
+</div>
+
+<div class="start-overlay" id="startOverlay">
+  <h1>Oléo</h1>
+  <p>A finger painting studio rendered in oil. Pinch thumb to any finger to paint in that finger's hue. Choose your palette, then give yourself to the canvas.</p>
+  <button class="start-btn" id="startBtn">Begin</button>
+</div>
+
+<script type="module">
+  import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
+
+  /* ==================== CANVAS SETUP ==================== */
+  const video = document.getElementById("webcam");
+  const canvasBg = document.getElementById("canvasBg");
+  const canvasPaint = document.getElementById("canvasPaint");
+  const canvasHUD = document.getElementById("canvasHUD");
+  const bgCtx = canvasBg.getContext("2d");
+  const paintCtx = canvasPaint.getContext("2d");
+  const hudCtx = canvasHUD.getContext("2d");
+
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  let width = 0, height = 0;
+
+  /* ==================== PALETTES ==================== */
+  const palettes = [
+    {
+      name: "Classical",
+      colors: [
+        { base: "#c8394a", name: "Cadmium" },
+        { base: "#e6b54c", name: "Ochre" },
+        { base: "#2e6b5e", name: "Viridian" },
+        { base: "#3a4e7a", name: "Ultramarine" },
+        { base: "#1a1814", name: "Mars Black" }
+      ]
+    },
+    {
+      name: "Bloom",
+      colors: [
+        { base: "#e8708d", name: "Rose" },
+        { base: "#f4a261", name: "Apricot" },
+        { base: "#b7cf82", name: "Sage" },
+        { base: "#7a9cc6", name: "Periwinkle" },
+        { base: "#6b4a7a", name: "Plum" }
+      ]
+    },
+    {
+      name: "Earth",
+      colors: [
+        { base: "#8b3a2f", name: "Sienna" },
+        { base: "#c98a4b", name: "Raw Sienna" },
+        { base: "#5c6b3a", name: "Olive" },
+        { base: "#4a5d6b", name: "Slate" },
+        { base: "#2a1f14", name: "Umber" }
+      ]
+    }
+  ];
+
+  let currentPalette = 0;
+
+  /* ==================== PAINT STATE ==================== */
+  // Each finger tip index (MediaPipe): thumb=4, index=8, middle=12, ring=16, pinky=20
+  const FINGER_TIPS = [4, 8, 12, 16, 20];
+  const FINGER_NAMES = ["thumb", "index", "middle", "ring", "pinky"];
+
+  // Previous positions and active state per hand+finger
+  const fingerState = new Map(); // key: `${handedness}-${fingerIdx}` → { prevX, prevY, active, stroke }
+
+  // For undo: each stroke is a full imageData snapshot before the stroke started
+  const history = [];
+  const MAX_HISTORY = 10;
+  let pendingSnapshot = null;
+  let anyFingerPainting = false;
+
+  /* ==================== HAND TRACKING ==================== */
+  let handLandmarker;
+  let isRunning = false;
+
+  function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    for (const c of [canvasBg, canvasPaint, canvasHUD]) {
+      // Only resize dimensions when larger; otherwise preserve paint data
+      if (c === canvasPaint) {
+        // Preserve paint on resize
+        const tmp = document.createElement("canvas");
+        tmp.width = canvasPaint.width;
+        tmp.height = canvasPaint.height;
+        tmp.getContext("2d").drawImage(canvasPaint, 0, 0);
+        c.width = Math.floor(width * DPR);
+        c.height = Math.floor(height * DPR);
+        c.style.width = width + "px";
+        c.style.height = height + "px";
+        paintCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        paintCtx.drawImage(tmp, 0, 0, tmp.width / DPR, tmp.height / DPR);
+      } else {
+        c.width = Math.floor(width * DPR);
+        c.height = Math.floor(height * DPR);
+        c.style.width = width + "px";
+        c.style.height = height + "px";
+      }
+    }
+    bgCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    hudCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawCanvasBackground();
+  }
+
+  /* ==================== LINEN CANVAS BACKGROUND ==================== */
+  function drawCanvasBackground() {
+    // Warm off white linen texture
+    bgCtx.fillStyle = "#f0e4cf";
+    bgCtx.fillRect(0, 0, width, height);
+
+    // Subtle vignette
+    const vg = bgCtx.createRadialGradient(width/2, height/2, Math.min(width,height)*0.25, width/2, height/2, Math.max(width,height)*0.75);
+    vg.addColorStop(0, "rgba(240, 228, 207, 0)");
+    vg.addColorStop(1, "rgba(140, 115, 85, 0.22)");
+    bgCtx.fillStyle = vg;
+    bgCtx.fillRect(0, 0, width, height);
+
+    // Linen weave: horizontal and vertical threads
+    bgCtx.globalAlpha = 0.06;
+    for (let y = 0; y < height; y += 2) {
+      bgCtx.fillStyle = y % 4 === 0 ? "#c9b590" : "#e8d9b8";
+      bgCtx.fillRect(0, y, width, 1);
+    }
+    for (let x = 0; x < width; x += 2) {
+      bgCtx.fillStyle = x % 4 === 0 ? "#c9b590" : "#e8d9b8";
+      bgCtx.fillRect(x, 0, 1, height);
+    }
+    bgCtx.globalAlpha = 1;
+
+    // Grain noise overlay
+    const grain = bgCtx.getImageData(0, 0, Math.min(width, 800), Math.min(height, 600));
+    for (let i = 0; i < grain.data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 18;
+      grain.data[i] = Math.max(0, Math.min(255, grain.data[i] + n));
+      grain.data[i+1] = Math.max(0, Math.min(255, grain.data[i+1] + n));
+      grain.data[i+2] = Math.max(0, Math.min(255, grain.data[i+2] + n));
+    }
+    bgCtx.putImageData(grain, 0, 0);
+
+    // Tile grain across
+    if (width > 800 || height > 600) {
+      const tile = document.createElement("canvas");
+      tile.width = Math.min(width, 800);
+      tile.height = Math.min(height, 600);
+      const tctx = tile.getContext("2d");
+      tctx.drawImage(canvasBg, 0, 0);
+      const pattern = bgCtx.createPattern(tile, "repeat");
+      bgCtx.fillStyle = pattern;
+      bgCtx.fillRect(0, 0, width, height);
+    }
+  }
+
+  /* ==================== OIL PAINT STROKE ENGINE ==================== */
+  // Convert hex to rgb
+  function hexToRgb(hex) {
+    const h = hex.replace("#", "");
+    return {
+      r: parseInt(h.slice(0,2), 16),
+      g: parseInt(h.slice(2,4), 16),
+      b: parseInt(h.slice(4,6), 16)
+    };
+  }
+
+  // Vary a color slightly for natural pigment variation
+  function varyColor(rgb, amount = 20) {
+    const v = () => (Math.random() - 0.5) * amount;
+    return {
+      r: Math.max(0, Math.min(255, rgb.r + v())),
+      g: Math.max(0, Math.min(255, rgb.g + v())),
+      b: Math.max(0, Math.min(255, rgb.b + v()))
+    };
+  }
+
+  function rgbStr({r, g, b}, a = 1) {
+    return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
+  }
+
+  // Lighten / darken
+  function shade(rgb, factor) {
+    return {
+      r: Math.max(0, Math.min(255, rgb.r + factor)),
+      g: Math.max(0, Math.min(255, rgb.g + factor)),
+      b: Math.max(0, Math.min(255, rgb.b + factor))
+    };
+  }
+
+  // Draw one oil dab: a cluster of bristle strokes with highlights and shadows
+  function drawOilDab(ctx, x, y, angle, speed, baseHex, size) {
+    const rgb = hexToRgb(baseHex);
+    const radius = size;
+
+    // 1. Soft underbody: wide, darkened base (the "shadow" of impasto)
+    const shadowColor = shade(rgb, -35);
+    const underGrad = ctx.createRadialGradient(x + radius * 0.15, y + radius * 0.15, 0, x + radius * 0.15, y + radius * 0.15, radius * 1.2);
+    underGrad.addColorStop(0, rgbStr(shadowColor, 0.55));
+    underGrad.addColorStop(0.7, rgbStr(shadowColor, 0.25));
+    underGrad.addColorStop(1, rgbStr(shadowColor, 0));
+    ctx.fillStyle = underGrad;
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 1.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Main paint body: varied pigment blobs
+    const blobCount = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < blobCount; i++) {
+      const off = radius * 0.55;
+      const bx = x + (Math.random() - 0.5) * off;
+      const by = y + (Math.random() - 0.5) * off;
+      const br = radius * (0.55 + Math.random() * 0.5);
+      const bc = varyColor(rgb, 30);
+      ctx.fillStyle = rgbStr(bc, 0.85 + Math.random() * 0.15);
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. Bristle streaks: thin lines along movement direction showing brush hairs
+    const bristleCount = 8 + Math.floor(Math.random() * 6);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    for (let i = 0; i < bristleCount; i++) {
+      const bt = (i / bristleCount - 0.5) * radius * 1.6;
+      const bLen = radius * (0.8 + Math.random() * 0.9);
+      const bCol = Math.random() < 0.5 ? varyColor(shade(rgb, -18), 12) : varyColor(shade(rgb, 22), 12);
+      ctx.strokeStyle = rgbStr(bCol, 0.5 + Math.random() * 0.35);
+      ctx.lineWidth = 0.6 + Math.random() * 0.9;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-bLen * 0.5, bt + (Math.random() - 0.5) * 1.5);
+      // Slight curve
+      ctx.quadraticCurveTo(0, bt + (Math.random() - 0.5) * 2, bLen * 0.5, bt + (Math.random() - 0.5) * 1.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 4. Top highlights: small light spots where the impasto catches light
+    const highlightColor = shade(rgb, 55);
+    const highCount = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < highCount; i++) {
+      const hx = x - radius * 0.2 + (Math.random() - 0.5) * radius * 0.7;
+      const hy = y - radius * 0.2 + (Math.random() - 0.5) * radius * 0.7;
+      const hr = radius * (0.12 + Math.random() * 0.2);
+      const hGrad = ctx.createRadialGradient(hx, hy, 0, hx, hy, hr);
+      hGrad.addColorStop(0, rgbStr(highlightColor, 0.55 + Math.random() * 0.25));
+      hGrad.addColorStop(1, rgbStr(highlightColor, 0));
+      ctx.fillStyle = hGrad;
+      ctx.beginPath();
+      ctx.arc(hx, hy, hr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 5. Tiny white specular dots where paint peaks
+    if (Math.random() < 0.55) {
+      const sx = x - radius * 0.25 + (Math.random() - 0.5) * radius * 0.4;
+      const sy = y - radius * 0.25 + (Math.random() - 0.5) * radius * 0.4;
+      ctx.fillStyle = `rgba(255, 250, 235, ${0.35 + Math.random() * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 0.8 + Math.random() * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Paint a continuous stroke segment between two points
+  function paintSegment(x1, y1, x2, y2, baseHex, speed) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.5) return;
+
+    const angle = Math.atan2(dy, dx);
+    // Brush size varies with speed: fast = thinner, slow = thicker (natural pressure sim)
+    const baseSize = 18;
+    const speedFactor = Math.max(0.55, Math.min(1.2, 1.2 - speed * 0.015));
+    const brushSize = baseSize * speedFactor;
+
+    // Space dabs closely for dense coverage
+    const step = brushSize * 0.32;
+    const steps = Math.max(1, Math.ceil(dist / step));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const px = x1 + dx * t;
+      const py = y1 + dy * t;
+      // Slight random jitter for organic line
+      const jx = px + (Math.random() - 0.5) * 1.2;
+      const jy = py + (Math.random() - 0.5) * 1.2;
+      const sizeVar = brushSize * (0.85 + Math.random() * 0.3);
+      drawOilDab(paintCtx, jx, jy, angle, speed, baseHex, sizeVar);
+    }
+  }
+
+  /* ==================== UNDO / CLEAR / SAVE ==================== */
+  function captureSnapshot() {
+    if (history.length >= MAX_HISTORY) history.shift();
+    history.push(paintCtx.getImageData(0, 0, canvasPaint.width, canvasPaint.height));
+  }
+
+  function undo() {
+    if (history.length === 0) return;
+    const snap = history.pop();
+    paintCtx.setTransform(1, 0, 0, 1, 0, 0);
+    paintCtx.putImageData(snap, 0, 0);
+    paintCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  function clearPaint() {
+    captureSnapshot();
+    paintCtx.clearRect(0, 0, width, height);
+  }
+
+  function savePainting() {
+    // Merge bg + paint
+    const out = document.createElement("canvas");
+    out.width = canvasPaint.width;
+    out.height = canvasPaint.height;
+    const octx = out.getContext("2d");
+    octx.drawImage(canvasBg, 0, 0);
+    octx.drawImage(canvasPaint, 0, 0);
+    const link = document.createElement("a");
+    link.download = `oleo-${Date.now()}.png`;
+    link.href = out.toDataURL("image/png");
+    link.click();
+  }
+
+  /* ==================== PALETTE UI ==================== */
+  const paletteEl = document.getElementById("palette");
+
+  function buildPalette() {
+    // Clear existing swatches except label
+    paletteEl.querySelectorAll(".swatch, .palette-switcher").forEach(el => el.remove());
+
+    const colors = palettes[currentPalette].colors;
+    colors.forEach((c, i) => {
+      const s = document.createElement("div");
+      s.className = "swatch";
+      s.style.background = `radial-gradient(circle at 30% 30%, ${lighten(c.base, 20)}, ${c.base} 60%, ${darken(c.base, 25)})`;
+      s.title = `${c.name} — ${FINGER_NAMES[i]}`;
+      paletteEl.appendChild(s);
+    });
+
+    // Palette switcher
+    const sw = document.createElement("button");
+    sw.className = "palette-switcher btn";
+    sw.style.marginTop = "6px";
+    sw.style.padding = "6px 10px";
+    sw.style.fontSize = "8px";
+    sw.textContent = palettes[currentPalette].name;
+    sw.onclick = () => {
+      currentPalette = (currentPalette + 1) % palettes.length;
+      buildPalette();
+      updateGuideDots();
+    };
+    paletteEl.appendChild(sw);
+  }
+
+  function lighten(hex, amt) {
+    const {r, g, b} = hexToRgb(hex);
+    return `rgb(${Math.min(255, r+amt)}, ${Math.min(255, g+amt)}, ${Math.min(255, b+amt)})`;
+  }
+  function darken(hex, amt) {
+    const {r, g, b} = hexToRgb(hex);
+    return `rgb(${Math.max(0, r-amt)}, ${Math.max(0, g-amt)}, ${Math.max(0, b-amt)})`;
+  }
+
+  function updateGuideDots() {
+    const colors = palettes[currentPalette].colors;
+    FINGER_NAMES.forEach((name, i) => {
+      const el = document.getElementById(`guide-${name}`);
+      if (el) el.style.background = `radial-gradient(circle at 30% 30%, ${lighten(colors[i].base, 20)}, ${colors[i].base} 60%, ${darken(colors[i].base, 25)})`;
+    });
+  }
+
+  /* ==================== HUD OVERLAY (fingertip cursors) ==================== */
+  function drawHUD(hands) {
+    hudCtx.clearRect(0, 0, width, height);
+    if (!hands || !hands.length) return;
+
+    const colors = palettes[currentPalette].colors;
+    for (let h = 0; h < hands.length; h++) {
+      const lm = hands[h];
+      const thumb = { x: (1 - lm[4].x) * width, y: lm[4].y * height };
+
+      for (let f = 0; f < FINGER_TIPS.length; f++) {
+        const idx = FINGER_TIPS[f];
+        const tip = { x: (1 - lm[idx].x) * width, y: lm[idx].y * height };
+        const color = colors[f].base;
+        const isPainting = fingerIsPainting(thumb, tip, f);
+
+        // Connecting line to thumb (except thumb itself)
+        if (f > 0) {
+          hudCtx.strokeStyle = isPainting ? `${color}cc` : `${color}44`;
+          hudCtx.lineWidth = isPainting ? 2 : 1;
+          hudCtx.setLineDash(isPainting ? [] : [3, 4]);
+          hudCtx.beginPath();
+          hudCtx.moveTo(thumb.x, thumb.y);
+          hudCtx.lineTo(tip.x, tip.y);
+          hudCtx.stroke();
+          hudCtx.setLineDash([]);
+        }
+
+        // Fingertip dot
+        const r = isPainting ? 10 : 6;
+        hudCtx.fillStyle = color;
+        hudCtx.globalAlpha = isPainting ? 0.9 : 0.55;
+        hudCtx.beginPath();
+        hudCtx.arc(tip.x, tip.y, r, 0, Math.PI * 2);
+        hudCtx.fill();
+        hudCtx.globalAlpha = 1;
+
+        // Ring when painting
+        if (isPainting) {
+          hudCtx.strokeStyle = "rgba(255, 250, 235, 0.7)";
+          hudCtx.lineWidth = 1.5;
+          hudCtx.beginPath();
+          hudCtx.arc(tip.x, tip.y, r + 4, 0, Math.PI * 2);
+          hudCtx.stroke();
+        }
+      }
+    }
+  }
+
+  /* ==================== PAINTING LOGIC ==================== */
+  // Distance in normalized 3D space between thumb and given fingertip
+  function pinchDist3D(lm, tipIdx) {
+    const a = lm[4], b = lm[tipIdx];
+    return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2);
+  }
+
+  // Shared check used by HUD + paint loop
+  function fingerIsPainting(thumbPx, tipPx, fingerIdx) {
+    if (fingerIdx === 0) return false; // thumb itself doesn't paint; it's the trigger
+    const key = currentLastKey + "-" + fingerIdx;
+    const s = fingerState.get(key);
+    return s && s.active;
+  }
+
+  let currentLastKey = "none";
+
+  function processHands(results) {
+    if (!results.landmarks || !results.landmarks.length) {
+      // Deactivate all
+      for (const [k, s] of fingerState) s.active = false;
+      anyFingerPainting = false;
+      return;
+    }
+
+    const colors = palettes[currentPalette].colors;
+    let anyActive = false;
+
+    for (let h = 0; h < results.landmarks.length; h++) {
+      const lm = results.landmarks[h];
+      const handedness = results.handednesses?.[h]?.[0]?.categoryName || `H${h}`;
+      currentLastKey = handedness;
+
+      const thumbPx = { x: (1 - lm[4].x) * width, y: lm[4].y * height };
+
+      for (let f = 1; f < FINGER_TIPS.length; f++) {
+        const tipIdx = FINGER_TIPS[f];
+        const tipPx = { x: (1 - lm[tipIdx].x) * width, y: lm[tipIdx].y * height };
+        const key = `${handedness}-${f}`;
+        const pinch = pinchDist3D(lm, tipIdx);
+
+        let s = fingerState.get(key);
+        if (!s) {
+          s = { prevX: tipPx.x, prevY: tipPx.y, active: false, pinchWasOpen: true };
+          fingerState.set(key, s);
+        }
+
+        // Hysteresis: need tighter pinch to engage, looser to disengage
+        const engageThreshold = 0.065;
+        const releaseThreshold = 0.095;
+        const wasActive = s.active;
+        if (!wasActive && pinch < engageThreshold) s.active = true;
+        else if (wasActive && pinch > releaseThreshold) s.active = false;
+
+        if (s.active) {
+          anyActive = true;
+          // Capture snapshot at start of any new stroke
+          if (!wasActive) {
+            if (!anyFingerPainting) captureSnapshot();
+            s.prevX = tipPx.x;
+            s.prevY = tipPx.y;
+          }
+          const dx = tipPx.x - s.prevX;
+          const dy = tipPx.y - s.prevY;
+          const speed = Math.hypot(dx, dy);
+          paintSegment(s.prevX, s.prevY, tipPx.x, tipPx.y, colors[f].base, speed);
+          s.prevX = tipPx.x;
+          s.prevY = tipPx.y;
+        } else if (wasActive) {
+          // stroke ended naturally
+          s.prevX = tipPx.x;
+          s.prevY = tipPx.y;
+        } else {
+          s.prevX = tipPx.x;
+          s.prevY = tipPx.y;
+        }
+      }
+    }
+
+    anyFingerPainting = anyActive;
+    drawHUD(results.landmarks);
+  }
+
+  /* ==================== DETECTION LOOP ==================== */
+  async function initHandTracking() {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
+    );
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2
+    });
+  }
+
+  async function initCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 720, facingMode: "user" }, audio: false
+    });
+    video.srcObject = stream;
+    return new Promise(resolve => {
+      video.onloadedmetadata = async () => { await video.play(); resolve(); };
+    });
+  }
+
+  function detectLoop() {
+    if (!isRunning) return;
+    if (video.readyState >= 2 && handLandmarker) {
+      const results = handLandmarker.detectForVideo(video, performance.now());
+      processHands(results);
+    }
+    requestAnimationFrame(detectLoop);
+  }
+
+  /* ==================== EVENTS ==================== */
+  window.addEventListener("resize", resize);
+  document.getElementById("undoBtn").addEventListener("click", undo);
+  document.getElementById("clearBtn").addEventListener("click", clearPaint);
+  document.getElementById("saveBtn").addEventListener("click", savePainting);
+
+  document.getElementById("startBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("startBtn");
+    btn.disabled = true; btn.textContent = "Loading…";
+    try {
+      await initCamera();
+      await initHandTracking();
+      isRunning = true;
+      detectLoop();
+      document.getElementById("startOverlay").style.display = "none";
+    } catch (err) {
+      btn.disabled = false; btn.textContent = "Retry";
+      console.error(err);
+    }
+  });
+
+  /* ==================== BOOT ==================== */
+  resize();
+  buildPalette();
+  updateGuideDots();
+</script>
+</body>
+</html>
